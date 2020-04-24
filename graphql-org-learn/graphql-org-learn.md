@@ -569,18 +569,259 @@ mutation CreateReviewForEpisode($ep: Episode!, $review: ReviewInput!) {
 - The `__typename` meta field returns the object type at that location.
 - In the example below, `search` is a union type that can return 3 different types. The `__typename` field allows the client to determine the type of a specific object that's returned.
 
+  ```gql
+  {
+    search(text: "an") {
+      __typename
+      ... on Human {
+        name
+      }
+      ... on Droid {
+        name
+      }
+      ... on Starship {
+        name
+      }
+    }
+  }
+  ```
+
+  ```json
+  {
+    "data": {
+      "search": [
+        {
+          "__typename": "Human",
+          "name": "Han Solo"
+        },
+        {
+          "__typename": "Human",
+          "name": "Leia Organa"
+        },
+        {
+          "__typename": "Starship",
+          "name": "TIE Advanced x1"
+        }
+      ]
+    }
+  }
+  ```
+
+## [Schemas and Types](https://graphql.org/learn/schema/)
+
+- A query starts with a 'root' object.
+- Language-agnostic 'GraphQL schema language'
+
+### Object types and fields
+
+- Most basic part of GraphQL schema: object types
+
+```gql
+type Character {
+  name: String!
+  appearsIn: [Episode!]!
+}
+```
+
+- `Character`
+  - An object type
+    - A type with fields
+- `name` & `appearsIn`
+  - Fields
+- `String`
+  - Built-in scalar type
+    - Resolve to simple scalar values
+    - No sub-types
+- `String!`
+  - Non-nullable String field
+    - The GraphQL service will always return a value.
+- `[Episode]!`
+  - Non-nullable array of `Episode` objects.
+
+### Arguments
+
+- Every field on a GraphQL object type can have 0 or more arguments.
+
+```gql
+type Starship {
+  id: ID!
+  name: String!
+  length(unit: LengthUnit = METER): Float
+}
+```
+
+- All arguments are named (passed by name, not position: `unit: `).
+- Arguments can be required or optional.
+  - Optional arguments can include a default value (`= METER`).
+
+### Query & Mutation types
+
+```gql
+schema {
+  query: Query
+  mutation: Mutation
+}
+```
+
+- 2 special object types in a schema that define the *entry point* of a GraphQL query.
+  - `query`
+    - Every GraphQL service has a `query` type.
+  - `mutation`
+    - Not every GraphQL service has a `mutation` type.
+
+### Scalar types
+
+- Scalar types represent the leaves of the query (no sub-leaves).
+- Default GraphQL scalars:
+  - `Int`
+    - 32-bit signed integer
+  - `Float`
+    - Double-precision floating-point value
+  - `String`
+    - UTF-8 character sequence
+  - `Boolean`
+    - `true` or `false`
+  - `ID`
+    - Unique identifer.
+    - Serialized as a String (but not intended to be human-readable).
+- Can also specify custom scalar types (e.g., `Date`).
+  - Up to implementer to decide how it should be serialized, deserialized, and validated.
+
+### Enumeration types
+
+- Scalars that are restricted to a specified set of allowed values.
+- Faciliates:
+  - Validating that arguments are one of the allowed values.
+  - Communicating the set of allowed values for the field via the type system.
+- GraphQL service implementations will make use of enums if languages support them; otherwise, they will be implemented some other way.
+
+```gql
+enum Episode {
+  NEWHOPE
+  EMPIRE
+  JEDI
+}
+```
+
+### Lists and Non-Null
+
+- Types that can be defined in GraphQL:
+  - Object
+  - Scalar
+  - Enum
+- *Type modifiers* can be used for these types.
+  - `!` after the type name: Non-null
+    - The server always expects to return a non-null value.
+      - If it gets a null, it will trigger a GraphQL execution error.
+  - `[]` around the type: List
+    - `[String!]`: List can be null, but can't have null members.
+    - `[String]!`: List cannot be null, but can contain null members.
+
+### Interfaces
+
+- Interface: An abstract type that includes a certain set of fields the type must include to implement the interface.
+
+```gql
+interface Character {
+  id: ID!
+  name: String!
+  friends: [Character]
+  appearsIn: [Episode]!
+}
+
+type Human implements Character {
+  id: ID!
+  name: String!
+  friends: [Character]
+  appearsIn: [Episode]!
+  starships: [Starship]
+  totalCredits: Int
+}
+
+type Droid implements Character {
+  id: ID!
+  name: String!
+  friends: [Character]
+  appearsIn: [Episode]!
+  primaryFunction: String
+}
+```
+
+- To query for `Character` and get the `primaryFunction` if the returned item is a `Droid`, use an inline fragment.
+
+  ```gql
+  query HeroForEpisode($ep: Episode!) {
+    hero(episode: $ep) {
+      name
+      ... on Droid {
+        primaryFunction
+      }
+    }
+  }
+  ```
+
+  ```json
+  {
+    "ep": "JEDI"
+  }
+  ```
+
+  ```json
+  {
+    "data": {
+      "hero": {
+        "name": "R2-D2",
+        "primaryFunction": "Astromech"
+      }
+    }
+  }
+  ```
+
+### Union types
+
+- Union types don't specify common fields between the types.
+  - Members of a union type must be concrete objects (not interfaces or other unions).
+
+```gql
+union SearchResult = Human | Droid | Starship
+```
+
 ```gql
 {
   search(text: "an") {
     __typename
     ... on Human {
       name
+      height
     }
     ... on Droid {
       name
+      primaryFunction
     }
     ... on Starship {
       name
+      length
+    }
+  }
+}
+```
+
+```gql
+{
+  search(text: "an") {
+    __typename
+    ... on Character {
+      name
+    }
+    ... on Human {
+      height
+    }
+    ... on Droid {
+      primaryFunction
+    }
+    ... on Starship {
+      name
+      length
     }
   }
 }
@@ -592,17 +833,65 @@ mutation CreateReviewForEpisode($ep: Episode!, $review: ReviewInput!) {
     "search": [
       {
         "__typename": "Human",
-        "name": "Han Solo"
+        "name": "Han Solo",
+        "height": 1.8
       },
       {
         "__typename": "Human",
-        "name": "Leia Organa"
+        "name": "Leia Organa",
+        "height": 1.5
       },
       {
         "__typename": "Starship",
-        "name": "TIE Advanced x1"
+        "name": "TIE Advanced x1",
+        "length": 9.2
       }
     ]
   }
 }
 ```
+
+### Input types
+
+- A complex object can be passed as an argument.
+  - This is particularly useful when working with mutations (e.g., creating an object).
+- It's defined with the `input` keyword instead of `type`.
+
+```gql
+input ReviewInput {
+  stars: Int!
+  commentary: String
+}
+```
+
+- In a mutation:
+
+  ```gql
+  mutation CreateReviewForEpisode($ep: Episode!, $review: ReviewInput!) {
+    createReview(episode: $ep, review: $review) {
+      stars
+      commentary
+    }
+  }
+  ```
+
+  ```json
+  {
+    "ep": "JEDI",
+    "review": {
+      "stars": 5,
+      "commentary": "This is a great movie!"
+    }
+  }
+  ```
+
+  ```json
+  {
+    "data": {
+      "createReview": {
+        "stars": 5,
+        "commentary": "This is a great movie!"
+      }
+    }
+  }
+  ```
